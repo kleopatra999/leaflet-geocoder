@@ -144,28 +144,35 @@ describe('Search options', function () {
     });
   });
 
-  // Tests return value of getLatLngParam()
-  describe('latlng', function () {
-    it('should not set focus.point parameters by default', function () {
+  // Tests return value of getFocusParam()
+  describe('focus', function () {
+    it('should set focus.point parameters by default', function () {
       var geocoder = new L.Control.Geocoder();
 
-      expect(geocoder.getLatlngParam(params)['focus.point.lat']).to.be(undefined);
-      expect(geocoder.getLatlngParam(params)['focus.point.lon']).to.be(undefined);
+      // Set map zoom and center to an arbitrary amount
+      var map = createMap();
+      map.setView([30, 30], 10);
+      geocoder.addTo(map);
+
+      expect(geocoder.getFocusParam(params)['focus.point.lat']).to.be(30);
+      expect(geocoder.getFocusParam(params)['focus.point.lon']).to.be(30);
+
+      destroyMap(map);
     });
 
     it('should not set focus.point parameters if option is set to false', function () {
       var geocoder = new L.Control.Geocoder('', {
-        latlng: false
+        focus: false
       });
 
-      expect(geocoder.options.latlng).to.be(false);
-      expect(geocoder.getLatlngParam(params)['focus.point.lat']).to.be(undefined);
-      expect(geocoder.getLatlngParam(params)['focus.point.lon']).to.be(undefined);
+      expect(geocoder.options.focus).to.be(false);
+      expect(geocoder.getFocusParam(params)['focus.point.lat']).to.be(undefined);
+      expect(geocoder.getFocusParam(params)['focus.point.lon']).to.be(undefined);
     });
 
     it('should set focus.point to current map center if option is set to true', function () {
       var geocoder = new L.Control.Geocoder('', {
-        latlng: true
+        focus: true
       });
 
       // Set map zoom and center to an arbitrary amount
@@ -174,49 +181,49 @@ describe('Search options', function () {
       geocoder.addTo(map);
 
       // Make sure option is set to the correct boolean
-      expect(geocoder.options.latlng).to.be(true);
+      expect(geocoder.options.focus).to.be(true);
 
       // Make sure the params match the map center we set it to
-      expect(geocoder.getLatlngParam(params)['focus.point.lat']).to.be(30);
-      expect(geocoder.getLatlngParam(params)['focus.point.lon']).to.be(30);
+      expect(geocoder.getFocusParam(params)['focus.point.lat']).to.be(30);
+      expect(geocoder.getFocusParam(params)['focus.point.lon']).to.be(30);
 
       destroyMap(map);
     });
 
     it('should set focus.point from an array [lat, lng] if provided', function () {
       var geocoder = new L.Control.Geocoder('', {
-        latlng: [50, 30]
+        focus: [50, 30]
       });
 
-      expect(geocoder.getLatlngParam(params)['focus.point.lat']).to.be(50);
-      expect(geocoder.getLatlngParam(params)['focus.point.lon']).to.be(30);
+      expect(geocoder.getFocusParam(params)['focus.point.lat']).to.be(50);
+      expect(geocoder.getFocusParam(params)['focus.point.lon']).to.be(30);
     });
 
     it('should set focus.point from an object {lon, lat} if provided', function () {
       var geocoder = new L.Control.Geocoder('', {
-        latlng: {lon: 30, lat: 50}
+        focus: {lon: 30, lat: 50}
       });
 
-      expect(geocoder.getLatlngParam(params)['focus.point.lat']).to.be(50);
-      expect(geocoder.getLatlngParam(params)['focus.point.lon']).to.be(30);
+      expect(geocoder.getFocusParam(params)['focus.point.lat']).to.be(50);
+      expect(geocoder.getFocusParam(params)['focus.point.lon']).to.be(30);
     });
 
     it('should set focus.point from an object {lat, lng} if provided', function () {
       var geocoder = new L.Control.Geocoder('', {
-        latlng: {lat: 50, lng: 30}
+        focus: {lat: 50, lng: 30}
       });
 
-      expect(geocoder.getLatlngParam(params)['focus.point.lat']).to.be(50);
-      expect(geocoder.getLatlngParam(params)['focus.point.lon']).to.be(30);
+      expect(geocoder.getFocusParam(params)['focus.point.lat']).to.be(50);
+      expect(geocoder.getFocusParam(params)['focus.point.lon']).to.be(30);
     });
 
     it('should set focus.point from an L.LatLng object if provided', function () {
       var geocoder = new L.Control.Geocoder('', {
-        latlng: L.latLng(50.5, 30.5)
+        focus: L.latLng(50.5, 30.5)
       });
 
-      expect(geocoder.getLatlngParam(params)['focus.point.lat']).to.be(50.5);
-      expect(geocoder.getLatlngParam(params)['focus.point.lon']).to.be(30.5);
+      expect(geocoder.getFocusParam(params)['focus.point.lat']).to.be(50.5);
+      expect(geocoder.getFocusParam(params)['focus.point.lon']).to.be(30.5);
     });
   });
 
@@ -251,6 +258,101 @@ describe('Search options', function () {
       });
 
       expect(geocoder.getLayers(params)['layers']).to.eql(['venue', 'address']);
+    });
+  });
+
+  // Pass-through query parameters
+  describe('query parameters', function () {
+    it('should return original parameters if option is not set', function () {
+      var geocoder = new L.Control.Geocoder({
+        layers: 'coarse', // Convenience option for parameter
+        focus: false      // This just prevents geocoder from looking for the map
+      });
+      var params = geocoder.getParams();
+      var testParams = {
+        layers: 'coarse'
+      };
+
+      expect(params).to.eql(testParams);
+    });
+
+    it('should return original parameters if option is a falsy value', function () {
+      // Test `params: false`
+      var geocoder1 = new L.Control.Geocoder({
+        layers: 'coarse', // Convenience option for parameter
+        focus: false,     // This prevents geocoder from requiring that Leaflet is initialized
+        params: false
+      });
+      var params1 = geocoder1.getParams();
+
+      // Test `params: null`
+      var geocoder2 = new L.Control.Geocoder({
+        layers: 'coarse', // Convenience option for parameter
+        focus: false,     // This prevents geocoder from requiring that Leaflet is initialized
+        params: null
+      });
+      var params2 = geocoder2.getParams();
+
+      var testParams = {
+        layers: 'coarse'
+      };
+
+      expect(params1).to.eql(testParams);
+      expect(params2).to.eql(testParams);
+    });
+
+    it('should return combined parameters if option is set', function () {
+      var geocoder = new L.Control.Geocoder({
+        layers: 'coarse', // Convenience option for parameter
+        focus: false,     // This prevents geocoder from requiring that Leaflet is initialized
+        params: {
+          'boundary.rect.min_lat': -10,
+          'boundary.country': 'AUS',
+          'sources': 'oa'
+        }
+      });
+      var params = geocoder.getParams();
+      var testParams = {
+        'layers': 'coarse',
+        'boundary.rect.min_lat': -10,
+        'boundary.country': 'AUS',
+        'sources': 'oa'
+      };
+
+      expect(params).to.eql(testParams);
+    });
+
+    it('should overwrite parameters set by convenience options', function () {
+      var geocoder = new L.Control.Geocoder({
+        layers: ['venue', 'address'], // Convenience option for parameter
+        focus: false,     // This prevents geocoder from requiring that Leaflet is initialized
+        params: {
+          layers: 'coarse'
+        }
+      });
+      var params = geocoder.getParams();
+      var testParams = {
+        'layers': 'coarse'
+      };
+
+      expect(params).to.eql(testParams);
+    });
+
+    it('should not remove unknown parameters', function () {
+      var geocoder = new L.Control.Geocoder({
+        layers: 'coarse', // Convenience option for parameter
+        focus: false,     // This prevents geocoder from requiring that Leaflet is initialized
+        params: {
+          unknownParam: false
+        }
+      });
+      var params = geocoder.getParams();
+      var testParams = {
+        'layers': 'coarse',
+        'unknownParam': false
+      };
+
+      expect(params).to.eql(testParams);
     });
   });
 });

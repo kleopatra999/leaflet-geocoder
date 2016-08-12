@@ -1,3 +1,32 @@
+## v1.7.0 (August 12, 2016)
+
+- **Added a `.reset()` method.** For developers that need to interact with the geocoder programatically, a single method that resets the input and results is pretty handy. This breaks an undocumented internal method, but you weren't using that anyway, right? 😉 (with [@Abbe98](https://github.com/Abbe98), see [#133](https://github.com/mapzen/leaflet-geocoder/pull/133))
+- **Added support for `focus` and `blur` event listeners.** You can now attach handlers for those events directly to the geocoder instance. It forwards the same DOM events from the input element, so developers have a more convenient way of tapping into them. [#117](https://github.com/mapzen/leaflet-geocoder/issues/133)
+- We've implemented an internal process change: the code is now stored in the `src` directory, and only copied to `dist` when we publish the package. [#137](https://github.com/mapzen/leaflet-geocoder/issues/137)
+
+## v1.6.3 (July 26, 2016)
+
+- This is a dependency maintainance release. All dependencies have been updated and fixed to a specific version.
+- The `peerDependency` range has been relaxed to allow any version of the Leaflet v1 release candidate. You can now use this plugin in a project with the recently released `leaflet@1.0.0-rc.2` or an older `leaflet@1.0.0-beta.1` without seeing a peer dependency error.
+
+## v1.6.2 (May 25, 2016)
+
+- Small tweak: the height of each result on touch devices was too large, so nudge it down a bit.
+
+## v1.6.1 (May 19, 2016)
+
+- Fix a bug where the reset button (the `×`) remained visible if the `.collapse()` method was called while there was still something in the input box.
+
+## v1.6.0 (May 18, 2016)
+
+- The geocoder now has a `.version` property. Sometimes you just need to know.
+- The `latlng` option has been renamed to `focus` to be closer to the syntax for [Mapzen Search](https://mapzen.com/documentation/search/search/). Also, the behavior has changed to automatically prioritize results closer to the current view by default. You can turn this off by explicitly setting `focus: false`. The `latlng` property will still work but we will display a deprecation warning and remove it in the next major version.
+- Mapzen Search API accepts many query parameters (such as for filtering, bounding results, and so on) that don't have a corresponding convenience option in this plugin. Rather than support each option individually, we now provide a **params** option which allows developers to pass through any parameter they wish to the API. Valid parameters will be anything that is covered in the [Mapzen Search documentation](https://mapzen.com/documentation/search/) (so please read it carefully), but the plugin will not throw away invalid parameters in case new parameters are supported in the future.
+
+## v1.5.2 (April 18, 2016)
+
+- Mapzen Search API supports the `layers` parameter natively for autocomplete queries now! For more information, see this issue: https://github.com/pelias/api/issues/449. We removed all the code from this plugin that did the filtering on the client side, which was no longer needed.
+
 ## v1.5.1 (February 25, 2016)
 
 - Fix a bug where the results box is displayed when there is nothing in it. The effect was only noticeable when the results box is styled in a way that gives it dimension (e.g. a border or a minimum height).

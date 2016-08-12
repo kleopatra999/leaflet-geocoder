@@ -26,15 +26,21 @@ describe('Interface', function () {
   });
 
   describe('The × button (reset)', function () {
-    it('should not be visible when control is first added', function () {
-      var geocoder = new L.Control.Geocoder();
+    var geocoder;
+
+    beforeEach('initialize geocoder', function () {
+      geocoder = new L.Control.Geocoder();
       geocoder.addTo(map);
+
+      // Prevent geocoder.callPelias() from getting called during these tests, so stub it
+      sinon.stub(geocoder, 'callPelias');
+    });
+
+    it('should not be visible when control is first added', function () {
       expect(geocoder._reset.classList.contains('leaflet-pelias-hidden')).to.be(true);
     });
 
     it('should be visible when input has 1 character', function () {
-      var geocoder = new L.Control.Geocoder();
-      geocoder.addTo(map);
       // Simulates input action
       geocoder._input.focus();
       geocoder._input.value = 'a';
@@ -43,8 +49,6 @@ describe('Interface', function () {
     });
 
     it('should be visible when input has 2 characters', function () {
-      var geocoder = new L.Control.Geocoder();
-      geocoder.addTo(map);
       // Simulates input action
       geocoder._input.focus();
       geocoder._input.value = 'bb';
@@ -53,9 +57,6 @@ describe('Interface', function () {
     });
 
     it('should reset input when clicked', function () {
-      var geocoder = new L.Control.Geocoder();
-      geocoder.addTo(map);
-
       // Simulates input action
       geocoder._input.focus();
       geocoder._input.value = 'sometext';
@@ -69,10 +70,7 @@ describe('Interface', function () {
     });
 
     it('fires `reset` event', function () {
-      var geocoder = new L.Control.Geocoder();
       var onReset = sinon.spy();
-
-      geocoder.addTo(map);
       geocoder.on('reset', onReset);
 
       happen.click(geocoder._reset);
@@ -295,13 +293,126 @@ describe('Interface', function () {
     it('collapses if: map is dragged, and a result is highlighted');
   });
 
-  // TODO
-  describe.skip('#focus', function () {
-    it('focuses on input when .focus() method is called');
+  describe('#focus', function () {
+    var geocoder;
+
+    beforeEach('initialize geocoder', function () {
+      geocoder = new L.Control.Geocoder();
+      geocoder.addTo(map);
+    });
+
+    it('focuses on input when .focus() method is called', function () {
+      geocoder.focus();
+
+      expect(document.activeElement).to.be(geocoder._input);
+    });
+
+    it('fires `focus` event', function () {
+      var onFocus = sinon.spy();
+      geocoder.on('focus', onFocus);
+
+      geocoder.focus();
+
+      expect(onFocus.called).to.be(true);
+      expect(onFocus.callCount).to.be.lessThan(2);
+      expect(onFocus.args[0][0].type).to.be('focus');
+    });
+
+    it('passes an event object containing the `originalEvent` property', function () {
+      var onFocus = sinon.spy();
+      geocoder.on('focus', onFocus);
+
+      geocoder.focus();
+
+      expect(typeof onFocus.args[0][0].originalEvent).to.be('object');
+    });
   });
 
-  describe.skip('#blur', function () {
-    it('blurs from input when .blur() method is called');
+  describe('#blur', function () {
+    var geocoder;
+
+    beforeEach('initialize geocoder', function () {
+      geocoder = new L.Control.Geocoder();
+      geocoder.addTo(map);
+    });
+
+    it('blurs from input when .blur() method is called', function () {
+      geocoder._input.focus();
+      expect(document.activeElement).to.be(geocoder._input);
+
+      geocoder.blur();
+
+      expect(document.activeElement).to.not.be(geocoder._input);
+    });
+
+    it('fires `blur` event', function () {
+      var onBlur = sinon.spy();
+      geocoder.on('blur', onBlur);
+
+      // Focus first, then blur
+      geocoder._input.focus();
+      geocoder.blur();
+
+      expect(onBlur.called).to.be(true);
+      expect(onBlur.callCount).to.be.lessThan(2);
+      expect(onBlur.args[0][0].type).to.be('blur');
+    });
+
+    it('passes an event object containing the `originalEvent` property', function () {
+      var onBlur = sinon.spy();
+      geocoder.on('blur', onBlur);
+
+      // Focus first, then blur
+      geocoder._input.focus();
+      geocoder.blur();
+
+      expect(typeof onBlur.args[0][0].originalEvent).to.be('object');
+    });
+  });
+
+  describe('#reset', function () {
+    var geocoder;
+
+    beforeEach('initialize geocoder', function () {
+      geocoder = new L.Control.Geocoder();
+      geocoder.addTo(map);
+    });
+
+    it('clears inputs and results', function () {
+      geocoder._input.value = 'foo';
+      geocoder.reset();
+
+      expect(geocoder._input.value).to.be('');
+      expect(geocoder._results.children.length).to.be(0);
+    });
+
+    it('does not collapse the geocoder if expanded', function () {
+      var onCollapse = sinon.spy();
+      geocoder.on('collapse', onCollapse);
+
+      geocoder.expand();
+      geocoder.reset();
+
+      expect(onCollapse.callCount).to.be.lessThan(2);
+      expect(geocoder._container.className.indexOf('leaflet-pelias-expanded')).to.be.greaterThan(-1);
+    });
+
+    it('does not remove focus if present', function () {
+      geocoder._input.focus();
+      geocoder.reset();
+
+      expect(document.activeElement).to.be(geocoder._input);
+    });
+
+    it('fires `reset` event', function () {
+      var onReset = sinon.spy();
+      geocoder.on('reset', onReset);
+
+      geocoder.reset();
+
+      expect(onReset.called).to.be(true);
+      expect(onReset.callCount).to.be.lessThan(2);
+    });
   });
 
   describe('Edge cases', function () {

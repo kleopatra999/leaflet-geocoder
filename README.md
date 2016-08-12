@@ -15,7 +15,7 @@ A plugin that adds the ability to search (geocode) a Leaflet-powered map using [
 
 ## Requirements
 
-Requires the **[Leaflet](https://github.com/Leaflet/Leaflet)** mapping library. Supports Leaflet **v0.7.3** (and higher) and **v1.0.0-beta.1** (and higher). (Previous Leaflet versions have not been tested.)
+Requires the **[Leaflet](https://github.com/Leaflet/Leaflet)** mapping library. Supports Leaflet **v0.7.3** (and higher) and **v1.0.0** (currently targeting [Release Candidate 2](https://github.com/Leaflet/Leaflet/releases/tag/v1.0.0-rc.2)). (Previous Leaflet versions may work, but are not actively tested or supported.)
 
 **Browser support** is IE8+ [(more details below)](#browser-support).
 
@@ -68,15 +68,24 @@ And then import it in your module system. For instance, with [Browserify](http:/
 
 ```javascript
 // Require Leaflet first
-var L = require('leaflet')
+var L = require('leaflet');
 
 // Requiring the geocoder extends Leaflet automatically
-require('leaflet-geocoder-mapzen')
+require('leaflet-geocoder-mapzen');
 
 // Now you can do step 2 and 3 from "Basic usage" instructions, above
 ```
 
 This plugin implements the [Universal Module Definition](https://github.com/umdjs/umd) so you can also use it in AMD and CommonJS environments.
+
+#### ES2015 (ECMAScript 6)
+
+To import this plugin in ES2015 environments, the `import` syntax is supported:
+
+```javascript
+import L from 'leaflet';
+import 'leaflet-geocoder-mapzen';
+```
 
 ## Customizing the plugin
 
@@ -87,7 +96,7 @@ var options = {
   bounds: true,
   position: 'topright',
   expanded: true
-}
+};
 
 L.control.geocoder('<your-api-key>', options).addTo(map);
 ```
@@ -101,9 +110,11 @@ Some options affect the Mapzen Search / Pelias query itself.
 option      | description                               | default value
 ----------- | ----------------------------------------- | ---------------------
 **url** | _String._ Host endpoint for a Pelias-compatible search API. | `'https://search.mapzen.com/v1'`
-**bounds** | _[Leaflet LatLngBounds object](http://leafletjs.com/reference.html#latlngbounds)_ or _Boolean_. If `true`, search is bounded by the current map view. You may also provide a custom bounding box in form of a LatLngBounds object. | `false`
-**latlng** | _[Leaflet LatLng object](http://leafletjs.com/reference.html#latlng)_ or _Boolean_. If `true`, search is biased to prioritize results near the center of the current view. You may also provide a custom LatLng value (in any of the [accepted Leaflet formats](http://leafletjs.com/reference.html#latlng)) to act as the center bias. | `false`
+**bounds** | _[Leaflet LatLngBounds object](http://leafletjs.com/reference.html#latlngbounds)_ or _Boolean_. If `true`, search is bounded by the current map view. You may also provide a custom bounding box in form of a LatLngBounds object. _Note: `bounds` is not supported by autocomplete._ | `false`
+**focus** | _[Leaflet LatLng object](http://leafletjs.com/reference.html#latlng)_ or _Boolean_. If `true`, search and autocomplete prioritizes results near the center of the current view. You may also provide a custom LatLng value (in any of the [accepted Leaflet formats](http://leafletjs.com/reference.html#latlng)) to act as the center bias. | `true`
+**latlng** | _Deprecated._ Please use **focus** instead. |
 **layers** | _String_ or _Array_. Filters results by layers ([documentation](https://mapzen.com/documentation/search/search/#filter-by-data-type)). If left blank, results will come from all available layers. | `null`
+**params** | _Object_. An object of key-value pairs which will be serialized into query parameters that will be passed to the API. This allows custom queries that are not already supported by the convenience options listed above. For a full list of supported parameters, please read the [Mapzen Search documentation](https://mapzen.com/documentation/search/). **IMPORTANT: some parameters only work with the `/search` endpoint, and do not apply to `/autocomplete` requests! All supplied parameters are passed through; this library doesn't know which are valid parameters and which are not.** In the event that other options conflict with parameters passed passed through `params`, the `params` option takes precedence. | `null`
 
 ### Interaction behavior
 
@@ -134,13 +145,13 @@ L.control.geocoder('<your-api-key>', {
 
 // Searching nearby [50.5, 30.5]
 L.control.geocoder('<your-api-key>', {
-  latlng: [50.5, 30.5], // this can also written as {lat: 50.5, lon: 30.5} or L.latLng(50.5, 30.5)
+  focus: [50.5, 30.5], // this can also written as {lat: 50.5, lon: 30.5} or L.latLng(50.5, 30.5)
   placeholder: 'Search nearby [50.5, 30.5]'
 }).addTo(map);
 
 // Taking just the center of the map (lat/lon) into account
 L.control.geocoder('<your-api-key>', {
-  latlng: true,
+  focus: true,
   placeholder: 'Search nearby'
 }).addTo(map);
 
@@ -182,6 +193,20 @@ L.control.geocoder('<your-api-key>', {
 L.control.geocoder('<your-api-key>', {
   layers: ['venue', 'address'],
   placeholder: 'Street Geocoder'
+}).addTo(map);
+
+// Custom filtering and bounding parameters
+// For valid parameters, see Mapzen Search documentation for
+// search (https://mapzen.com/documentation/search/search/)
+// and autocomplete (https://mapzen.com/documentation/search/autocomplete/)
+// Note that some parameters use dot notation and so must be quoted
+// in JavaScript otherwise it will result in a syntax error
+L.control.geocoder('<your-api-key>', {
+  params: {
+    sources: 'whosonfirst',
+    'boundary.country': 'AUS'
+  },
+  placeholder: 'Results via Who’s on First in Australia'
 }).addTo(map);
 
 // Customizing layer icons
@@ -260,16 +285,26 @@ var element = geocoder.getContainer();
 geocoder.removeFrom(map); // or geocoder.remove() in Leaflet v1
 ```
 
+### Properties
+
+You can retrieve the current version of the geocoder.
+
+```javascript
+console.log(geocoder.version);
+```
+
 ### Methods
 
 There are additional methods on the geocoder that you can use.
 
 ```js
 // Expand the geocoder.
+// Fires the `expand` event.
 geocoder.expand();
 
 // Collapse the geocoder.
 // This works even if the option `expanded` is set to true!
+// Fires the `collapse` event.
 geocoder.collapse();
 
 // Focus on the geocoder input.
@@ -279,6 +314,11 @@ geocoder.focus();
 // Removes focus from the geocoder input.
 // This also clears results and collapses the geocoder (if enabled).
 geocoder.blur();
+
+// Clears inputs and results from the geocoder control.
+// This does not affect collapse or expanded state, and does not remove focus.
+// Fires the `reset` event.
+geocoder.reset();
 ```
 
 ### Events
@@ -304,6 +344,8 @@ event         | description
 **expand**    | Fired when the geocoder is expanded.
 **collapse**  | Fired when the geocoder is collapsed.
 **reset**     | Fired when the geocoder is reset ("x" button is clicked).
+**focus**     | Fired when the geocoder is focused on the input.
+**blur**      | Fired when the geocoder loses focus on the input.
 
 Here is [a demo of the events](http://mapzen.github.io/leaflet-geocoder/examples/events.html).
 
@@ -333,9 +375,15 @@ property         | description
 
 property          | description
 ----------------- | -----------------------------------------------------------
-**originalEvent** | The original event (mouse or keyboard) reported by the browser.
+**originalEvent** | The original event object ([`MouseEvent`](https://developer.mozilla.org/en-US/docs/Web/API/MouseEvent) or [`KeyboardEvent`](https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent)) reported by the browser.
 **latlng**        | A [Leaflet LatLng](http://leafletjs.com/reference.html#latlng) object representing the coordinates of the result.
 **feature**       | The [GeoJSON feature object](https://mapzen.com/documentation/search/response/#list-of-features-returned) from Mapzen Search, including feature geometry and properties.
+
+#### on `focus` and `blur`
+
+property          | description
+----------------- | -----------------------------------------------------------
+**originalEvent** | The original [`FocusEvent`](https://developer.mozilla.org/en-US/docs/Web/API/FocusEvent) event object reported by the browser.
 
 ### Browser support
 

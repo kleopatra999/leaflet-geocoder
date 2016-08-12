@@ -33,6 +33,8 @@
 
   L.Control.Geocoder = L.Control.extend({
 
+    version: '1.7.0',
+
     includes: L.Mixin.Events,
 
     options: {
@@ -42,7 +44,7 @@
       placeholder: 'Search',
       title: 'Search',
       bounds: false,
-      latlng: null,
+      focus: true,
       layers: null,
       panToPoint: true,
       pointIcon: true, // 'images/point_icon.png',
@@ -71,10 +73,33 @@
         this.apiKey = apiKey;
       }
 
+      // Deprecation warnings
+      // If options.latlng is defined, warn. (Do not check for falsy values, because it can be set to false.)
+      if (options && typeof options.latlng !== 'undefined') {
+        // Set user-specified latlng to focus option, but don't overwrite if it's already there
+        if (typeof options.focus === 'undefined') {
+          options.focus = options.latlng;
+        }
+        console.log('[leaflet-geocoder-mapzen] DEPRECATION WARNING:',
+          'As of v1.6.0, the `latlng` option is deprecated. It has been renamed to `focus`. `latlng` will be removed in a future version.');
+      }
+
       // Now merge user-specified options
       L.Util.setOptions(this, options);
-      this.marker;
       this.markers = [];
+    },
+
+    /**
+     * Resets the geocoder control to an empty state.
+     *
+     * @public
+     */
+    reset: function () {
+      this._input.value = '';
+      L.DomUtil.addClass(this._reset, 'leaflet-pelias-hidden');
+      this.removeMarkers();
+      this.clearResults();
+      this.fire('reset');
     },
 
     getLayers: function (params) {
@@ -129,36 +154,68 @@
       return params;
     },
 
-    getLatlngParam: function (params) {
-      /*
-       * this.options.latlng can be one of the following
-       * [50, 30] //Array
-       * {lon: 30, lat: 50} //Object
-       * {lat: 50, lng: 30} //Object
-       * L.latLng(50, 30) //Object
-       * true //Boolean - take the map center
-       * false //Boolean - No latlng to be considered
-      */
-      var latlng = this.options.latlng;
+    getFocusParam: function (params) {
+      /**
+       * this.options.focus can be one of the following
+       * [50, 30]           // Array
+       * {lon: 30, lat: 50} // Object
+       * {lat: 50, lng: 30} // Object
+       * L.latLng(50, 30)   // Object
+       * true               // Boolean - take the map center
+       * false              // Boolean - No latlng to be considered
+       */
+      var focus = this.options.focus;
 
-      if (!latlng) {
+      if (!focus) {
         return params;
       }
 
-      if (latlng.constructor === Array) {
-        // TODO Check for array size, throw errors if invalid lat/lon
-        params['focus.point.lat'] = latlng[0];
-        params['focus.point.lon'] = latlng[1];
-      } else if (typeof latlng !== 'object') {
-        // fallback to the map's center L.latLng()
-        latlng = this._map.getCenter();
+      if (focus === true) {
+        // If focus option is Boolean true, use current map center
+        var mapCenter = this._map.getCenter();
+        params['focus.point.lat'] = mapCenter.lat;
+        params['focus.point.lon'] = mapCenter.lng;
+      } else if (typeof focus === 'object') {
+        // Accepts array, object and L.latLng form
+        // Constructs the latlng object using Leaflet's L.latLng()
+        // [50, 30]
+        // {lon: 30, lat: 50}
+        // {lat: 50, lng: 30}
+        // L.latLng(50, 30)
+        var latlng = L.latLng(focus);
         params['focus.point.lat'] = latlng.lat;
         params['focus.point.lon'] = latlng.lng;
-      } else {
-        // TODO Check for valid L.LatLng Object or Object thats in the form of {lat:..,lon:..}
-        // TODO Check for valid lat/lon values, Error handling
-        params['focus.point.lat'] = latlng.lat;
-        params['focus.point.lon'] = latlng.lng ? latlng.lng : latlng.lon;
+      }
+
+      return params;
+    },
+
+    // @method getParams(params: Object)
+    // Collects all the parameters in a single object from various options,
+    // including options.bounds, options.focus, options.layers, the api key,
+    // and any params that are provided as a argument to this function.
+    // Note that options.params will overwrite any of these
+    getParams: function (params) {
+      params = params || {};
+      params = this.getBoundingBoxParam(params);
+      params = this.getFocusParam(params);
+      params = this.getLayers(params);
+
+      // Search API key
+      if (this.apiKey) {
+        params.api_key = this.apiKey;
+      }
+
+      var newParams = this.options.params;
+
+      if (!newParams) {
+        return params;
+      }
+
+      if (typeof newParams === 'object') {
+        for (var prop in newParams) {
+          params[prop] = newParams[prop];
+        }
       }
 
       return params;
@@ -209,14 +266,7 @@
     maxReqTimestampRendered: new Date().getTime(),
 
     callPelias: function (endpoint, params, type) {
-      params = this.getBoundingBoxParam(params);
-      params = this.getLatlngParam(params);
-      params = this.getLayers(params);
-
-      // Search API key
-      if (this.apiKey) {
-        params.api_key = this.apiKey;
-      }
+      params = this.getParams(params);
 
       L.DomUtil.addClass(this._search, 'leaflet-pelias-loading');
 
@@ -296,12 +346,6 @@
             }
           }
 
-          // Filter the unfiltered requests from the autocompletor
-          // This modifies the original response
-          if (type === 'autocomplete' && params.layers) {
-            results.features = this.filterFeaturesByLayers(results.features, params.layers);
-          }
-
           // Placeholder: handle place response
           if (type === 'place') {
             this.handlePlaceResponse(results);
@@ -321,62 +365,6 @@
           });
         }
       }, this);
-    },
-
-    /**
-     * Filters a Pelias response (likely from autocomplete)
-     * with the layer parameter given to it
-     * @param features - a FeatureCollection
-     * @param layers - string or array of layers queried
-     */
-    filterFeaturesByLayers: function (features, layers) {
-      var newFeatures = [];
-      // The 'coarse' alias is defined as these layers by the Pelias service.
-      // See documentation: https://mapzen.com/documentation/search/search/#filter-by-data-type
-      var coarseLayers = ['country', 'region', 'county', 'locality', 'localadmin', 'neighbourhood'];
-
-      // If layers parameter is an array, make a copy of it so that
-      // it does not modify the original options object.
-      if (L.Util.isArray(layers)) {
-        layers = layers.slice();
-      }
-
-      // The 'coarse' alias will be expanded to its defined layers.
-      // Handle if layers parameter is a string
-      if (layers === 'coarse') {
-        layers = coarseLayers;
-      } else if (L.Util.isArray(layers)) {
-        // And, handle if 'coarse' is in an array of layers
-        for (var i = 0; i < layers.length; i++) {
-          if (layers[i] === 'coarse') {
-            // Uses Array.splice() in an exotic way to splice one array into another array.
-            var args = [i, 1].concat(coarseLayers);
-            Array.prototype.splice.apply(layers, args);
-            // We will only do this once. If the layers provided is an array
-            // containing more than one instance of 'coarse', do not handle it.
-            // The filtering process below will ignore extra 'coarse' values, since
-            // no results will ever contain 'coarse' as a layer value.
-            break;
-          }
-        }
-      }
-
-      // Filtering the original features is done here.
-      for (var j = 0; j < features.length; j++) {
-        var feature = features[j];
-        if (feature.properties.layer === layers) {
-          newFeatures.push(feature);
-        } else if (L.Util.isArray(layers)) {
-          for (var k = 0; k < layers.length; k++) {
-            if (feature.properties.layer === layers[k]) {
-              newFeatures.push(feature);
-              break;
-            }
-          }
-        }
-      }
-
-      return newFeatures;
     },
 
     highlight: function (text, focus) {
@@ -495,23 +483,51 @@
     },
 
     showMarker: function (text, latlng) {
-      this.removeMarkers();
       this._map.setView(latlng, this._map.getZoom() || 8);
 
       var markerOptions = (typeof this.options.markers === 'object') ? this.options.markers : {};
 
       if (this.options.markers) {
-        this.marker = new L.marker(latlng, markerOptions).bindPopup(text); // eslint-disable-line new-cap
-        this._map.addLayer(this.marker);
-        this.markers.push(this.marker);
-        this.marker.openPopup();
+        var marker = new L.marker(latlng, markerOptions).bindPopup(text); // eslint-disable-line new-cap
+        this._map.addLayer(marker);
+        this.markers.push(marker);
+        marker.openPopup();
       }
+    },
+
+    /**
+     * Fits the map view to a given bounding box.
+     * Mapzen Search / Pelias returns the 'bbox' property on 'feature'. It is
+     * as an array of four numbers:
+     *   [
+     *     0: southwest longitude,
+     *     1: southwest latitude,
+     *     2: northeast longitude,
+     *     3: northeast latitude
+     *   ]
+     * This method expects the array to be passed directly and it will be converted
+     * to a boundary parameter for Leaflet's fitBounds().
+     */
+    fitBoundingBox: function (bbox) {
+      this._map.fitBounds([
+        [ bbox[1], bbox[0] ],
+        [ bbox[3], bbox[2] ]
+      ], {
+        animate: true,
+        maxZoom: 16
+      });
     },
 
     setSelectedResult: function (selected, originalEvent) {
       var latlng = L.GeoJSON.coordsToLatLng(selected.feature.geometry.coordinates);
       this._input.value = selected.innerText || selected.textContent;
-      this.showMarker(selected.innerHTML, latlng);
+      if (selected.feature.bbox) {
+        this.removeMarkers();
+        this.fitBoundingBox(selected.feature.bbox);
+      } else {
+        this.removeMarkers();
+        this.showMarker(selected.innerHTML, latlng);
+      }
       this.fire('select', {
         originalEvent: originalEvent,
         latlng: latlng,
@@ -524,16 +540,13 @@
       }
     },
 
-    resetInput: function () {
-      this._input.value = '';
-      L.DomUtil.addClass(this._reset, 'leaflet-pelias-hidden');
-      this.removeMarkers();
-      this._input.focus();
-      this.fire('reset');
-    },
-
-    // Convenience function for focusing on the input
-    // This is meant for external use.
+    /**
+     * Convenience function for focusing on the input
+     * A `focus` event is fired, but it is not fired here. An event listener
+     * was added to the _input element to forward the native `focus` event.
+     *
+     * @public
+     */
     focus: function () {
       // If not expanded, expand this first
       if (!L.DomUtil.hasClass(this._container, 'leaflet-pelias-expanded')) {
@@ -542,7 +555,13 @@
       this._input.focus();
     },
 
-    // Removes focus from geocoder control
+    /**
+     * Removes focus from geocoder control
+     * A `blur` event is fired, but it is not fired here. An event listener
+     * was added on the _input element to forward the native `blur` event.
+     *
+     * @public
+     */
     blur: function () {
       this._input.blur();
       this.clearResults();
@@ -616,6 +635,15 @@
       this._input = L.DomUtil.create('input', 'leaflet-pelias-input', this._container);
       this._input.spellcheck = false;
 
+      // Forwards focus and blur events from input to geocoder
+      L.DomEvent.addListener(this._input, 'focus', function (e) {
+        this.fire('focus', { originalEvent: e });
+      }, this);
+
+      L.DomEvent.addListener(this._input, 'blur', function (e) {
+        this.fire('blur', { originalEvent: e });
+      }, this);
+
       // Only set if title option is not null or falsy
       if (this.options.title) {
         this._input.title = this.options.title;
@@ -679,8 +707,8 @@
           }
         }, this)
         .on(this._reset, 'click', function (e) {
-          this.resetInput();
-          this.clearResults();
+          this.reset();
+          this._input.focus();
           L.DomEvent.stopPropagation(e);
         }, this)
         .on(this._input, 'keydown', function (e) {
@@ -691,7 +719,13 @@
           var panToPoint = function (shouldPan) {
             var _selected = self._results.querySelectorAll('.leaflet-pelias-selected')[0];
             if (_selected && shouldPan) {
-              self.showMarker(_selected.innerHTML, L.GeoJSON.coordsToLatLng(_selected.feature.geometry.coordinates));
+              if (_selected.feature.bbox) {
+                self.removeMarkers();
+                self.fitBoundingBox(_selected.feature.bbox);
+              } else {
+                self.removeMarkers();
+                self.showMarker(_selected.innerHTML, L.GeoJSON.coordsToLatLng(_selected.feature.geometry.coordinates));
+              }
             }
           };
 
